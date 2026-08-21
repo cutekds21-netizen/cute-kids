@@ -10,10 +10,10 @@
 // ------------------------------------------------------------------
 
 window.FIREBASE_CONFIG = {
- apiKey: "AIzaSyDhbJ0SYdmhJWHcMvvBPIm8Yl9uh4PDCHk",
+  apiKey: "AIzaSyDhbJ0SYdmhJWHcMvvBPIm8Yl9uh4PDCHk",
   authDomain: "cute-kids-48c5a.firebaseapp.com",
   projectId: "cute-kids-48c5a",
   storageBucket: "cute-kids-48c5a.firebasestorage.app",
   messagingSenderId: "643261840017",
-  appId: "1:643261840017:web:1be895bad096ab50139d30"
+  appId: "1:643261840017:web:1be895bad096ab50139d30",
 };
