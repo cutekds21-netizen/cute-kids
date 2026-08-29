@@ -1293,11 +1293,17 @@
   const WHATSAPP_WELCOME_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-welcome';
 
   function normalizePhoneForWhatsApp(raw) {
-    let digits = String(raw || '').replace(/[^\d]/g, '');
+    let digits = String(raw || '').replace(/[^\d]/g, ''); // يزيل + والمسافات والشرطات، يُبقي الأرقام فقط
     if (!digits) return '';
-    if (digits.startsWith('00')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
-    else if (digits.length === 9 && !digits.startsWith('966')) digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    if (digits.startsWith('00')) digits = digits.slice(2); // 00966... -> 966...
+    if (digits.startsWith('966') && digits.charAt(3) === '0') {
+      // خطأ شائع: كتابة +966 ثم إبقاء الصفر المحلي (مثال: +9660501234567) — يجب حذف هذا الصفر
+      digits = '966' + digits.slice(4);
+    } else if (digits.startsWith('0')) {
+      digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
+    } else if (digits.length === 9 && !digits.startsWith('966')) {
+      digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    }
     return digits;
   }
 
