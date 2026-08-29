@@ -601,6 +601,7 @@
           method: fd.get('first_payment_method'), account_id: fd.get('first_payment_account_id'),
           description: 'الدفعة الأولى عند القبول',
         });
+        sendWhatsAppWelcome(created.name, payload.guardian_phone || payload.father_phone);
         toast(`تمت إضافة الطالب (رقم القيد: ${created.reg_no}) وتسجيل الدفعة الأولى بمبلغ ${fmtMoney(firstPaymentAmount)}`, 'success');
       }
       closeModal('studentModal');
@@ -697,6 +698,9 @@
   });
   $('#printStudentCardBtn').addEventListener('click', () => {
     if (currentViewStudentId) printStudentCard(currentViewStudentId);
+  });
+  $('#printExamCardBtn').addEventListener('click', () => {
+    if (currentViewStudentId) printExamCard(currentViewStudentId);
   });
   $('#printFullStatementBtn').addEventListener('click', () => {
     if (currentViewStudentId) printStudentStatement(currentViewStudentId);
@@ -1282,6 +1286,39 @@
   // ---------- الطباعة (إيصال سند / بطاقة طالب) — عبر نافذة طباعة المتصفح، يمكن حفظها كـ PDF ----------
   const SCHOOL_PRINT_NAME = 'كيوت كيدز إنترناشونال';
 
+  // ---------- رسالة ترحيب واتساب تلقائية لولي الأمر عند تسجيل طالب جديد ----------
+  // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
+  // حتى لا يظهر توكن الوصول السري في كود الموقع. الدالة نفسها تتجاهل الأخطاء بصمت (fire-and-forget)
+  // كي لا يتعطّل حفظ الطالب أبدًا بسبب مشكلة في واتساب.
+  const WHATSAPP_WELCOME_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-welcome';
+
+  function normalizePhoneForWhatsApp(raw) {
+    let digits = String(raw || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
+    else if (digits.length === 9 && !digits.startsWith('966')) digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    return digits;
+  }
+
+  function sendWhatsAppWelcome(studentName, guardianPhone) {
+    const phone = normalizePhoneForWhatsApp(guardianPhone);
+    if (!phone) return;
+    try {
+      fetch(WHATSAPP_WELCOME_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentName, parentPhone: phone, schoolName: SCHOOL_PRINT_NAME }),
+      })
+        .then((res) => res.json().catch(() => ({})).then((data) => {
+          // لا نزعج المستخدم بأي رسالة — فقط نسجّل النتيجة في console المتصفح لتسهيل تشخيص أي عطل لاحقًا
+          if (res.ok && data && data.ok) console.info('WHATSAPP_WELCOME_SENT', data);
+          else console.warn('WHATSAPP_WELCOME_FAILED', res.status, data);
+        }))
+        .catch((e) => console.warn('WHATSAPP_WELCOME_NETWORK_ERROR', e && e.message));
+    } catch (e) { /* تجاهل */ }
+  }
+
   function printHTML(html) {
     $('#printArea').innerHTML = html;
     setTimeout(() => window.print(), 60);
@@ -1422,6 +1459,37 @@
       </div>
     `);
     try { EduQR.renderToCanvas(document.getElementById(qrId), qrText, { size: 130, margin: 2 }); } catch (e) { /* تجاهل */ }
+  }
+
+  // ---------- بطاقة دخول الامتحان: الشعار أعلى اليسار، اسم المدرسة أعلى الوسط، صورة الطالب بجانب اسمه،
+  // توقيع المدير أسفل اليسار، وختم المدرسة أسفل اليمين ----------
+  function printExamCard(studentId) {
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    const g = AccStore.gradeById(s.class_id);
+    printHTML(`
+      <div class="print-receipt exam-card">
+        <div class="ec-head">
+          <img class="ec-logo" src="../img/logo.jpg" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
+          <div class="ec-schoolname">
+            <b>${escapeHtml(SCHOOL_PRINT_NAME)}</b>
+            <span>بطاقة دخول الامتحان</span>
+          </div>
+        </div>
+        <div class="ec-body">
+          <div class="ec-info">
+            <div class="pr-row"><span>اسم الطالب</span><b>${escapeHtml(s.name)}</b></div>
+            <div class="pr-row"><span>رقم الجلوس</span><b class="mono">${escapeHtml(s.reg_no)}</b></div>
+            <div class="pr-row"><span>الصف / المرحلة</span><b>${g ? escapeHtml(g.name) : '—'}</b></div>
+          </div>
+          <div class="ec-photo">${s.photo ? `<img src="${s.photo}" alt="" />` : 'صورة الطالب'}</div>
+        </div>
+        <div class="ec-footer">
+          <div class="ec-sign"><span>توقيع المدير</span><b>ــــــــــــــــــ</b></div>
+          <div class="ec-sealbox"><span>ختم المدرسة</span><div class="ec-seal">ختم</div></div>
+        </div>
+      </div>
+    `);
   }
 
   // ---------- كشف كامل بجميع سندات القبض الخاصة بطالب (مستند واحد منفصل، بخلاف إيصال كل سند الذي يُطبع وحده الآن) ----------
