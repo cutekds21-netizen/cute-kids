@@ -1290,14 +1290,20 @@
   // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
   // حتى لا يظهر توكن الوصول السري في كود الموقع. الدالة نفسها تتجاهل الأخطاء بصمت (fire-and-forget)
   // كي لا يتعطّل حفظ الطالب أبدًا بسبب مشكلة في واتساب.
-  const WHATSAPP_WELCOME_API_URL = 'https://amjad-school-ledger.netlify.app/api/whatsapp-welcome';
+  const WHATSAPP_WELCOME_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-welcome';
 
   function normalizePhoneForWhatsApp(raw) {
-    let digits = String(raw || '').replace(/[^\d]/g, '');
+    let digits = String(raw || '').replace(/[^\d]/g, ''); // يزيل + والمسافات والشرطات، يُبقي الأرقام فقط
     if (!digits) return '';
-    if (digits.startsWith('00')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
-    else if (digits.length === 9 && !digits.startsWith('966')) digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    if (digits.startsWith('00')) digits = digits.slice(2); // 00966... -> 966...
+    if (digits.startsWith('966') && digits.charAt(3) === '0') {
+      // خطأ شائع: كتابة +966 ثم إبقاء الصفر المحلي (مثال: +9660501234567) — يجب حذف هذا الصفر
+      digits = '966' + digits.slice(4);
+    } else if (digits.startsWith('0')) {
+      digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
+    } else if (digits.length === 9 && !digits.startsWith('966')) {
+      digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    }
     return digits;
   }
 
@@ -1309,7 +1315,13 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentName, parentPhone: phone, schoolName: SCHOOL_PRINT_NAME }),
-      }).catch(() => { /* تجاهل بصمت — لا نريد إزعاج المستخدم برسالة خطأ بسبب واتساب */ });
+      })
+        .then((res) => res.json().catch(() => ({})).then((data) => {
+          // لا نزعج المستخدم بأي رسالة — فقط نسجّل النتيجة في console المتصفح لتسهيل تشخيص أي عطل لاحقًا
+          if (res.ok && data && data.ok) console.info('WHATSAPP_WELCOME_SENT', data);
+          else console.warn('WHATSAPP_WELCOME_FAILED', res.status, data);
+        }))
+        .catch((e) => console.warn('WHATSAPP_WELCOME_NETWORK_ERROR', e && e.message));
     } catch (e) { /* تجاهل */ }
   }
 
