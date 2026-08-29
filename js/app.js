@@ -601,6 +601,7 @@
           method: fd.get('first_payment_method'), account_id: fd.get('first_payment_account_id'),
           description: 'الدفعة الأولى عند القبول',
         });
+        sendWhatsAppWelcome(created.name, payload.guardian_phone || payload.father_phone);
         toast(`تمت إضافة الطالب (رقم القيد: ${created.reg_no}) وتسجيل الدفعة الأولى بمبلغ ${fmtMoney(firstPaymentAmount)}`, 'success');
       }
       closeModal('studentModal');
@@ -1284,6 +1285,33 @@
 
   // ---------- الطباعة (إيصال سند / بطاقة طالب) — عبر نافذة طباعة المتصفح، يمكن حفظها كـ PDF ----------
   const SCHOOL_PRINT_NAME = 'كيوت كيدز إنترناشونال';
+
+  // ---------- رسالة ترحيب واتساب تلقائية لولي الأمر عند تسجيل طالب جديد ----------
+  // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
+  // حتى لا يظهر توكن الوصول السري في كود الموقع. الدالة نفسها تتجاهل الأخطاء بصمت (fire-and-forget)
+  // كي لا يتعطّل حفظ الطالب أبدًا بسبب مشكلة في واتساب.
+  const WHATSAPP_WELCOME_API_URL = 'https://amjad-school-ledger.netlify.app/api/whatsapp-welcome';
+
+  function normalizePhoneForWhatsApp(raw) {
+    let digits = String(raw || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = '966' + digits.slice(1); // افتراضي: رقم جوال سعودي محلي (يبدأ بصفر)
+    else if (digits.length === 9 && !digits.startsWith('966')) digits = '966' + digits; // رقم بلا صفر ولا رمز دولة
+    return digits;
+  }
+
+  function sendWhatsAppWelcome(studentName, guardianPhone) {
+    const phone = normalizePhoneForWhatsApp(guardianPhone);
+    if (!phone) return;
+    try {
+      fetch(WHATSAPP_WELCOME_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentName, parentPhone: phone, schoolName: SCHOOL_PRINT_NAME }),
+      }).catch(() => { /* تجاهل بصمت — لا نريد إزعاج المستخدم برسالة خطأ بسبب واتساب */ });
+    } catch (e) { /* تجاهل */ }
+  }
 
   function printHTML(html) {
     $('#printArea').innerHTML = html;
