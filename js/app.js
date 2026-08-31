@@ -1284,7 +1284,7 @@
   });
 
   // ---------- الطباعة (إيصال سند / بطاقة طالب) — عبر نافذة طباعة المتصفح، يمكن حفظها كـ PDF ----------
-  const SCHOOL_PRINT_NAME = 'كيوت كيدز إنترناشونال';
+  const SCHOOL_PRINT_NAME = 'إيديوبلس - نجران';
 
   // ---------- رسالة ترحيب واتساب تلقائية لولي الأمر عند تسجيل طالب جديد ----------
   // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
@@ -1333,7 +1333,7 @@
   function printHeaderHTML(subtitle) {
     return `
       <div class="pr-head">
-        <img class="pr-logo" src="../img/logo.jpg" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
+        <img class="pr-logo" src="../img/logo.png" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
         <b>${escapeHtml(SCHOOL_PRINT_NAME)}</b>
         ${subtitle ? `<span>${escapeHtml(subtitle)}</span>` : ''}
       </div>`;
@@ -1476,7 +1476,7 @@
     printHTML(`
       <div class="print-receipt exam-card">
         <div class="ec-head">
-          <img class="ec-logo" src="../img/logo.jpg" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
+          <img class="ec-logo" src="../img/logo.png" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
           <div class="ec-schoolname">
             <b>${escapeHtml(SCHOOL_PRINT_NAME)}</b>
             <span>بطاقة دخول الامتحان</span>

@@ -19,11 +19,11 @@
 
   // ---- هوية المدرسة (تُستبدل تلقائيًا لكل موقع عبر متغير BRAND أدناه) ----
   addAll({
-    'كيوت كيدز إنترناشونال': 'Cute Kids International',
-    'Cute Kids — كيوت كيدز إنترناشونال': 'Cute Kids — Cute Kids International',
-    'كيوت كيدز إنترناشونال. جميع الحقوق محفوظة.': 'Cute Kids International. All rights reserved.',
-    'النظام المحاسبي المدرسي | كيوت كيدز إنترناشونال': 'School Accounting System | Cute Kids International',
-    'النظام المحاسبي | كيوت كيدز إنترناشونال': 'Accounting System | Cute Kids International',
+    'إيديوبلس - نجران': 'EduPlus Najran',
+    'EduPlus — إيديوبلس - نجران': 'EduPlus Najran',
+    'إيديوبلس - نجران. جميع الحقوق محفوظة.': 'EduPlus Najran. All rights reserved.',
+    'النظام المحاسبي المدرسي | إيديوبلس - نجران': 'School Accounting System | EduPlus Najran',
+    'النظام المحاسبي | إيديوبلس - نجران': 'Accounting System | EduPlus Najran',
     'المملكة العربية السعودية': 'Kingdom of Saudi Arabia',
   });
 
