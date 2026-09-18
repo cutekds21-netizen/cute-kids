@@ -19,11 +19,11 @@
 
   // ---- هوية المدرسة (تُستبدل تلقائيًا لكل موقع عبر متغير BRAND أدناه) ----
   addAll({
-    'إيديوبلس - نجران': 'EduPlus Najran',
-    'EduPlus — إيديوبلس - نجران': 'EduPlus Najran',
-    'إيديوبلس - نجران. جميع الحقوق محفوظة.': 'EduPlus Najran. All rights reserved.',
-    'النظام المحاسبي المدرسي | إيديوبلس - نجران': 'School Accounting System | EduPlus Najran',
-    'النظام المحاسبي | إيديوبلس - نجران': 'Accounting System | EduPlus Najran',
+    'إيديوبلس - جدة': 'EduPlus Jeddah',
+    'EduPlus — إيديوبلس - جدة': 'EduPlus Jeddah',
+    'إيديوبلس - جدة. جميع الحقوق محفوظة.': 'EduPlus Jeddah. All rights reserved.',
+    'النظام المحاسبي المدرسي | إيديوبلس - جدة': 'School Accounting System | EduPlus Jeddah',
+    'النظام المحاسبي | إيديوبلس - جدة': 'Accounting System | EduPlus Jeddah',
     'المملكة العربية السعودية': 'Kingdom of Saudi Arabia',
   });
 

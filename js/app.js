@@ -1284,13 +1284,13 @@
   });
 
   // ---------- الطباعة (إيصال سند / بطاقة طالب) — عبر نافذة طباعة المتصفح، يمكن حفظها كـ PDF ----------
-  const SCHOOL_PRINT_NAME = 'إيديوبلس - نجران';
+  const SCHOOL_PRINT_NAME = 'إيديوبلس - جدة';
 
   // ---------- رسالة ترحيب واتساب تلقائية لولي الأمر عند تسجيل طالب جديد ----------
   // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
   // حتى لا يظهر توكن الوصول السري في كود الموقع. الدالة نفسها تتجاهل الأخطاء بصمت (fire-and-forget)
   // كي لا يتعطّل حفظ الطالب أبدًا بسبب مشكلة في واتساب.
-  const WHATSAPP_WELCOME_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-welcome';
+  const WHATSAPP_WELCOME_API_URL = 'https://hilarious-meerkat-4dcccc.netlify.app/api/whatsapp-welcome';
 
   function normalizePhoneForWhatsApp(raw) {
     let digits = String(raw || '').replace(/[^\d]/g, ''); // يزيل + والمسافات والشرطات، يُبقي الأرقام فقط
@@ -1314,7 +1314,7 @@
       fetch(WHATSAPP_WELCOME_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentName, parentPhone: phone, schoolName: SCHOOL_PRINT_NAME }),
+        body: JSON.stringify({ studentName, phone }),
       })
         .then((res) => res.json().catch(() => ({})).then((data) => {
           // لا نزعج المستخدم بأي رسالة — فقط نسجّل النتيجة في console المتصفح لتسهيل تشخيص أي عطل لاحقًا
