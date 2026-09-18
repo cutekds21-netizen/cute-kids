@@ -828,10 +828,12 @@
           <td>${fmtMoney(v.amount)}</td>
           <td><div class="row-actions">
             <button class="icon-btn" data-print="${v.id}" title="طباعة / حفظ PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+            ${v.student_id ? `<button class="icon-btn" data-whatsapp="${v.id}" title="إرسال الإيصال عبر واتساب"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>` : ''}
             ${currentRole === 'admin' ? `<button class="icon-btn danger" data-delete="${v.id}" title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
           </div></td>
         </tr>`).join('');
       tbody.querySelectorAll('[data-print]').forEach((btn) => btn.addEventListener('click', () => printVoucher(btn.dataset.print)));
+      tbody.querySelectorAll('[data-whatsapp]').forEach((btn) => btn.addEventListener('click', () => sendReceiptWhatsApp(btn.dataset.whatsapp, btn)));
       tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
         if (!confirm('حذف سند القبض هذا؟ سيُحذف القيد المرتبط به أيضًا.')) return;
         btn.disabled = true;
@@ -1367,6 +1369,88 @@
       `);
     }
     try { EduQR.renderToCanvas(document.getElementById(qrId), qrText, { size: 100, margin: 2 }); } catch (e) { /* تجاهل */ }
+  }
+
+  // ---------- إرسال إيصال دفع الرسوم عبر واتساب (PDF فعلي مرفق بالرسالة، بضغطة زر يدوية) ----------
+  // يُبنى نفس الإيصال المستخدم في الطباعة، ثم يُحوَّل إلى PDF داخل المتصفح عبر html2pdf.js
+  // (محمَّلة من CDN في index.html)، ويُرسَل إلى دالة خادم (Netlify Function) ترفعه إلى واتساب
+  // وترسله ضمن قالب رسالة (payment_receipt) معتمد من ميتا يحتوي على مرفق مستند.
+  const WHATSAPP_RECEIPT_API_URL = 'https://hilarious-meerkat-4dcccc.netlify.app/api/whatsapp-receipt';
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = String(reader.result || '');
+        const commaIndex = result.indexOf(',');
+        resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function sendReceiptWhatsApp(voucherId, btn) {
+    const v = AccStore.getVoucher(voucherId);
+    if (!v || v.type !== 'receipt' || !v.student_id) return;
+    const student = AccStore.getStudent(v.student_id);
+    if (!student) { toast('تعذّر العثور على بيانات الطالب', 'error'); return; }
+    const phone = normalizePhoneForWhatsApp(student.guardian_phone || student.father_phone);
+    if (!phone) { toast('لا يوجد رقم جوال لولي الأمر لإرسال الإيصال إليه', 'error'); return; }
+    if (typeof window.html2pdf !== 'function') {
+      toast('تعذّر تجهيز ملف PDF — تحقّق من اتصال الإنترنت وأعد المحاولة', 'error');
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    let container = null;
+    try {
+      const account = AccStore.accountLabel(v.account_id);
+      const qrId = 'waReceiptQr' + Date.now();
+      const qrText = `${AccStore.SCHOOL_CODE}|${v.serial}`;
+
+      // نبني نفس عنصر الإيصال المستخدم في الطباعة، لكن خارج الشاشة، كي يلتقطه html2pdf
+      // بنفس تنسيق الموقع (خطوط، ألوان، QR) دون التأثير على واجهة المستخدم الحالية.
+      container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '760px';
+      container.style.background = '#fff';
+      container.innerHTML = buildFeeReceiptHTML(v, student, account, qrId, qrText);
+      document.body.appendChild(container);
+
+      try { EduQR.renderToCanvas(container.querySelector('#' + qrId), qrText, { size: 130, margin: 2 }); } catch (e) { /* تجاهل */ }
+      await new Promise((resolve) => setTimeout(resolve, 80)); // إتاحة وقت لرسم رمز QR قبل الالتقاط
+
+      const pdfBlob = await window.html2pdf().from(container).set({
+        margin: 10,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).outputPdf('blob');
+
+      const pdfBase64 = await blobToBase64(pdfBlob);
+
+      const res = await fetch(WHATSAPP_RECEIPT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, studentName: student.name, amount: fmtMoney(v.amount), pdfBase64 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && data.success) {
+        toast('تم إرسال الإيصال عبر واتساب', 'success');
+      } else {
+        console.warn('WHATSAPP_RECEIPT_FAILED', res.status, data);
+        toast('تعذّر إرسال الإيصال عبر واتساب', 'error');
+      }
+    } catch (e) {
+      console.warn('WHATSAPP_RECEIPT_ERROR', e && e.message);
+      toast('تعذّر إرسال الإيصال عبر واتساب', 'error');
+    } finally {
+      if (container && container.parentNode) container.parentNode.removeChild(container);
+      if (btn) btn.disabled = false;
+    }
   }
 
   // ---------- إيصال دفع الرسوم التفصيلي (لسندات القبض المرتبطة بطالب) ----------
