@@ -1411,8 +1411,13 @@
 
       // نبني نفس عنصر الإيصال المستخدم في الطباعة، لكن خارج الشاشة، كي يلتقطه html2pdf
       // بنفس تنسيق الموقع (خطوط، ألوان، QR) دون التأثير على واجهة المستخدم الحالية.
+      // ملاحظة مهمّة: نستخدم position: absolute وليس fixed — html2canvas (المكتبة التي
+      // يعتمد عليها html2pdf.js) قد يلتقط العناصر ذات position: fixed كصفحة فارغة تمامًا،
+      // لأن حساب "الالتقاط" يتم عبر استنساخ الصفحة وإعادة رسمها، وموضع fixed لا يُترجم
+      // بشكل موثوق خلال هذه العملية. absolute مع إزاحة كبيرة يحقق نفس هدف "خارج الشاشة"
+      // بأمان تام مع html2canvas.
       container = document.createElement('div');
-      container.style.position = 'fixed';
+      container.style.position = 'absolute';
       container.style.left = '-9999px';
       container.style.top = '0';
       container.style.width = '760px';
@@ -1426,7 +1431,9 @@
       const pdfBlob = await window.html2pdf().from(container).set({
         margin: 10,
         image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true },
+        // scrollX/scrollY: 0 يمنع أي إزاحة ناتجة عن تمرير الصفحة الفعلية من "تسريب" نفسها
+        // إلى إحداثيات الالتقاط — حماية إضافية ضد نفس عائلة مشاكل "PDF فارغ".
+        html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       }).outputPdf('blob');
 
