@@ -43,10 +43,47 @@
   function showLogin() { $('#loginScreen').classList.remove('hidden'); $('#appShell').classList.add('hidden'); }
   function showApp() { $('#loginScreen').classList.add('hidden'); $('#appShell').classList.remove('hidden'); }
 
-  const ROLE_LABEL = { admin: 'مسؤول', staff: 'محاسب' };
+  const ROLE_LABEL = { admin: 'مسؤول', staff: 'محاسب', viewer: 'مُشاهد (عرض فقط)' };
   // ---------- الصلاحيات: الحسابات غير الإدارية (محاسب) لا ترى إلا هذه الأقسام الثلاثة ----------
   const STAFF_ALLOWED_TABS = ['students', 'receipts', 'payments'];
   let currentRole = null;
+
+  // ---------- حساب "مُشاهد" (عرض فقط): يرى كل الأقسام والبيانات كالمسؤول تمامًا،
+  // لكنه لا يملك صلاحية الإضافة أو التعديل أو الحذف أو الطباعة أو إرسال واتساب ----------
+  function canModify() { return currentRole !== 'viewer'; }
+  function blockIfViewer() {
+    if (currentRole === 'viewer') {
+      toast('هذا الحساب للعرض فقط — لا يمكنه الإضافة أو التعديل أو الحذف أو الطباعة', 'error');
+      return true;
+    }
+    return false;
+  }
+  // كل عناصر الإضافة/التعديل/الحذف/الطباعة/واتساب التي تُخفى تلقائيًا عن حساب "مُشاهد"
+  const VIEWER_HIDE_SELECTORS = [
+    '#addStudentBtn', '#addUserBtn', '#viewAddPaymentBtn',
+    '#printStudentCardBtn', '#printExamCardBtn', '#printFullStatementBtn',
+    '[data-edit]', '[data-edit-user]', '[data-print]', '[data-whatsapp]',
+    '[data-reset-pwd]', '[data-toggle-active]', '[data-delete]', '[data-delete-user]', '[data-pay]',
+  ];
+  function applyViewerLock() {
+    if (currentRole !== 'viewer') return;
+    VIEWER_HIDE_SELECTORS.forEach((sel) => { $all(sel).forEach((el) => { el.style.display = 'none'; }); });
+    // إخفاء نموذجي "سند قبض جديد" و"سند صرف جديد" كاملين (العرض فقط لا يضيف سندات)
+    ['#receiptForm', '#paymentForm'].forEach((sel) => {
+      const form = document.querySelector(sel);
+      const panel = form && form.closest('.panel');
+      if (panel) panel.style.display = 'none';
+    });
+  }
+  let viewerLockObserverStarted = false;
+  function startViewerLockObserver() {
+    if (currentRole !== 'viewer' || viewerLockObserverStarted) return;
+    viewerLockObserverStarted = true;
+    applyViewerLock();
+    // الواجهة تُعاد بناؤها بالكامل عند كل تنقل بين التبويبات (innerHTML)، فنراقب التغييرات
+    // لإخفاء أزرار الإضافة/التعديل/الحذف/الطباعة تلقائيًا من جديد كل مرة
+    new MutationObserver(() => applyViewerLock()).observe(document.body, { childList: true, subtree: true });
+  }
 
   function applySessionUI(session) {
     currentRole = session.role;
@@ -56,13 +93,15 @@
     const roleBadge = $('#userRoleBadge');
     if (roleBadge) roleBadge.textContent = ROLE_LABEL[session.role] || '';
     const isAdmin = session.role === 'admin';
+    const isViewer = session.role === 'viewer';
     $all('.tab-btn').forEach((btn) => {
       if (STAFF_ALLOWED_TABS.includes(btn.dataset.tab)) return; // ظاهر دائمًا لكل الحسابات
-      btn.classList.toggle('hidden', !isAdmin);
+      btn.classList.toggle('hidden', !isAdmin && !isViewer); // المُشاهد يرى كل الأقسام كالمسؤول، بدون أي صلاحية تعديل
     });
-    // إخفاء إجمالي ما تم تحصيله من الطلاب عن الحسابات غير الإدارية
+    // إخفاء إجمالي ما تم تحصيله من الطلاب عن الحسابات غير الإدارية (المُشاهد يراه لأنه "يرى كل شيء")
     const revenueKpi = $('#studentsRevenueKpiBox');
-    if (revenueKpi) revenueKpi.classList.toggle('hidden', !isAdmin);
+    if (revenueKpi) revenueKpi.classList.toggle('hidden', !isAdmin && !isViewer);
+    startViewerLockObserver();
   }
 
   async function checkSession() {
@@ -127,7 +166,7 @@
   };
 
   function switchTab(tab) {
-    if (currentRole !== 'admin' && !STAFF_ALLOWED_TABS.includes(tab)) tab = 'students';
+    if (currentRole !== 'admin' && currentRole !== 'viewer' && !STAFF_ALLOWED_TABS.includes(tab)) tab = 'students';
     state.currentTab = tab;
     $all('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     $all('.tab-panel').forEach((p) => p.classList.add('hidden'));
@@ -307,8 +346,8 @@
         cv.addEventListener('click', () => openViewStudent(cv.dataset.student));
       });
       tbody.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => openViewStudent(b.dataset.view)));
-      tbody.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openStudentForm(b.dataset.edit)));
-      tbody.querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', () => openPaymentModal(b.dataset.pay)));
+      tbody.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openStudentForm(b.dataset.edit); }));
+      tbody.querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openPaymentModal(b.dataset.pay); }));
       tbody.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', async () => {
         const st = AccStore.getStudent(b.dataset.delete);
         if (!confirm(`حذف الطالب «${st ? st.name : ''}»؟ لن يتم حذف السندات المالية المرتبطة به.`)) return;
@@ -468,11 +507,12 @@
     updateFeeBreakdownHint();
   }
 
-  // ---------- إظهار/إخفاء قسم الدفعة الأولى: إجباري عند إضافة طالب جديد فقط، لا يظهر عند التعديل ----------
-  function setFirstPaymentRequired(required) {
-    $('#firstPaymentSection').classList.toggle('hidden', !required);
+  // ---------- إظهار/إخفاء قسم الدفعة الأولى: يظهر عند إضافة طالب جديد فقط (اختياري)، لا يظهر عند التعديل ----------
+  function setFirstPaymentRequired(show) {
+    $('#firstPaymentSection').classList.toggle('hidden', !show);
+    // الدفعة الأولى أصبحت اختيارية: لا تُفرض خاصية required على حقولها حتى عند إضافة طالب جديد
     ['first_payment_account_id', 'first_payment_amount', 'first_payment_method'].forEach((n) => {
-      studentForm.elements[n].required = required;
+      studentForm.elements[n].required = false;
     });
   }
 
@@ -520,12 +560,13 @@
     openModal('studentModal');
   }
 
-  $('#addStudentBtn').addEventListener('click', () => openStudentForm(null));
+  $('#addStudentBtn').addEventListener('click', () => { if (blockIfViewer()) return; openStudentForm(null); });
   $('#studentModalClose').addEventListener('click', () => closeModal('studentModal'));
   $('#studentCancelBtn').addEventListener('click', () => closeModal('studentModal'));
 
   studentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#studentFormAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(studentForm);
@@ -542,25 +583,28 @@
       alertBox.textContent = 'يرجى إدخال تفصيل الرسوم (رسم واحد على الأقل بقيمة أكبر من صفر) — هذا الحقل إجباري';
       return;
     }
+    // الدفعة الأولى أصبحت اختيارية عند إضافة طالب جديد: نتحقق من صحتها فقط إذا أدخل المستخدم مبلغًا فعليًا
     let firstPaymentAmount = 0;
-    if (isNewStudent) {
-      firstPaymentAmount = Number(fd.get('first_payment_amount'));
-      if (!fd.get('first_payment_amount') || !firstPaymentAmount || firstPaymentAmount <= 0) {
+    if (isNewStudent && fd.get('first_payment_amount')) {
+      firstPaymentAmount = Number(fd.get('first_payment_amount')) || 0;
+      if (firstPaymentAmount < 0) {
         alertBox.className = 'form-alert show error';
-        alertBox.textContent = 'يرجى إدخال مبلغ الدفعة الأولى (قيمة أكبر من صفر) — هذا الحقل إجباري لأي نوع رسوم';
+        alertBox.textContent = 'مبلغ الدفعة الأولى لا يمكن أن يكون سالبًا';
         return;
       }
-      if (!fd.get('first_payment_account_id')) {
-        alertBox.className = 'form-alert show error';
-        alertBox.textContent = 'يرجى اختيار نوع الرسوم (حساب الإيراد) الخاص بالدفعة الأولى';
-        return;
-      }
-      const discount = Number(fd.get('discount_percent')) || 0;
-      const netFee = tuitionFee * (1 - discount / 100);
-      if (firstPaymentAmount > netFee + 0.01) {
-        alertBox.className = 'form-alert show error';
-        alertBox.textContent = `الدفعة الأولى (${fmtMoney(firstPaymentAmount)}) لا يمكن أن تتجاوز صافي الرسوم المستحقة (${fmtMoney(netFee)})`;
-        return;
+      if (firstPaymentAmount > 0) {
+        if (!fd.get('first_payment_account_id')) {
+          alertBox.className = 'form-alert show error';
+          alertBox.textContent = 'يرجى اختيار نوع الرسوم (حساب الإيراد) الخاص بالدفعة الأولى';
+          return;
+        }
+        const discount = Number(fd.get('discount_percent')) || 0;
+        const netFee = tuitionFee * (1 - discount / 100);
+        if (firstPaymentAmount > netFee + 0.01) {
+          alertBox.className = 'form-alert show error';
+          alertBox.textContent = `الدفعة الأولى (${fmtMoney(firstPaymentAmount)}) لا يمكن أن تتجاوز صافي الرسوم المستحقة (${fmtMoney(netFee)})`;
+          return;
+        }
       }
     }
     const payload = {
@@ -596,13 +640,17 @@
         toast('تم تحديث بيانات الطالب', 'success');
       } else {
         const created = await AccStore.createStudent(payload);
-        newReceipt = await AccStore.createReceipt({
-          date: payload.admission_date, amount: firstPaymentAmount, party_name: created.name, student_id: created.id,
-          method: fd.get('first_payment_method'), account_id: fd.get('first_payment_account_id'),
-          description: 'الدفعة الأولى عند القبول',
-        });
+        if (firstPaymentAmount > 0) {
+          newReceipt = await AccStore.createReceipt({
+            date: payload.admission_date, amount: firstPaymentAmount, party_name: created.name, student_id: created.id,
+            method: fd.get('first_payment_method'), account_id: fd.get('first_payment_account_id'),
+            description: 'الدفعة الأولى عند القبول',
+          });
+          toast(`تمت إضافة الطالب (رقم القيد: ${created.reg_no}) وتسجيل الدفعة الأولى بمبلغ ${fmtMoney(firstPaymentAmount)}`, 'success');
+        } else {
+          toast(`تمت إضافة الطالب (رقم القيد: ${created.reg_no})`, 'success');
+        }
         sendWhatsAppWelcome(created.name, payload.guardian_phone || payload.father_phone);
-        toast(`تمت إضافة الطالب (رقم القيد: ${created.reg_no}) وتسجيل الدفعة الأولى بمبلغ ${fmtMoney(firstPaymentAmount)}`, 'success');
       }
       closeModal('studentModal');
       state.studentsPage = 1;
@@ -693,6 +741,7 @@
 
   $('#viewStudentClose').addEventListener('click', () => closeModal('viewStudentModal'));
   $('#viewAddPaymentBtn').addEventListener('click', () => {
+    if (blockIfViewer()) return;
     closeModal('viewStudentModal');
     openPaymentModal(currentViewStudentId);
   });
@@ -725,6 +774,7 @@
 
   studentPaymentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#studentPaymentAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(studentPaymentForm);
@@ -778,6 +828,7 @@
 
   receiptForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#receiptAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(receiptForm);
@@ -854,6 +905,7 @@
 
   paymentForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#paymentAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(paymentForm);
@@ -1046,7 +1098,7 @@
 
   // ---------- المستخدمون (متاح للمسؤول فقط) ----------
   function loadUsersTab() {
-    if (currentRole !== 'admin') return;
+    if (currentRole !== 'admin' && currentRole !== 'viewer') return;
     const session = AccAuth.getSession();
     const users = AccAuth.listUsers();
     const tbody = $('#usersTableBody');
@@ -1072,9 +1124,10 @@
         </td>
       </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">لا يوجد مستخدمون</td></tr>';
 
-    tbody.querySelectorAll('[data-edit-user]').forEach((b) => b.addEventListener('click', () => openEditUserModal(b.dataset.editUser)));
-    tbody.querySelectorAll('[data-reset-pwd]').forEach((b) => b.addEventListener('click', () => openResetPwdModal(b.dataset.resetPwd)));
+    tbody.querySelectorAll('[data-edit-user]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openEditUserModal(b.dataset.editUser); }));
+    tbody.querySelectorAll('[data-reset-pwd]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openResetPwdModal(b.dataset.resetPwd); }));
     tbody.querySelectorAll('[data-toggle-active]').forEach((b) => b.addEventListener('click', async () => {
+      if (blockIfViewer()) return;
       const u = users.find((x) => x.id === b.dataset.toggleActive);
       if (!u) return;
       b.disabled = true;
@@ -1085,6 +1138,7 @@
       loadUsersTab();
     }));
     tbody.querySelectorAll('[data-delete-user]').forEach((b) => b.addEventListener('click', async () => {
+      if (blockIfViewer()) return;
       const u = users.find((x) => x.id === b.dataset.deleteUser);
       if (!confirm(`حذف المستخدم «${u ? u.username : ''}»؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
       b.disabled = true;
@@ -1097,6 +1151,7 @@
   }
 
   $('#addUserBtn').addEventListener('click', () => {
+    if (blockIfViewer()) return;
     $('#userForm').reset();
     $('#userFormAlert').className = 'form-alert';
     openModal('userModal');
@@ -1105,6 +1160,7 @@
   $('#userModalCancel').addEventListener('click', () => closeModal('userModal'));
   $('#userForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#userFormAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(e.target);
@@ -1147,6 +1203,7 @@
   $('#editUserModalCancel').addEventListener('click', () => closeModal('editUserModal'));
   $('#editUserForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (blockIfViewer()) return;
     const alertBox = $('#editUserFormAlert');
     alertBox.className = 'form-alert';
     const fd = new FormData(e.target);
@@ -1342,6 +1399,7 @@
   }
 
   function printVoucher(voucherId) {
+    if (blockIfViewer()) return;
     const v = AccStore.getVoucher(voucherId);
     if (!v) return;
     const account = AccStore.accountLabel(v.account_id);
@@ -1391,6 +1449,7 @@
   }
 
   async function sendReceiptWhatsApp(voucherId, btn) {
+    if (blockIfViewer()) return;
     const v = AccStore.getVoucher(voucherId);
     if (!v || v.type !== 'receipt' || !v.student_id) return;
     const student = AccStore.getStudent(v.student_id);
@@ -1547,6 +1606,7 @@
   }
 
   function printStudentCard(studentId) {
+    if (blockIfViewer()) return;
     const s = AccStore.getStudent(studentId);
     if (!s) return;
     const g = AccStore.gradeById(s.class_id);
@@ -1570,6 +1630,7 @@
   // ---------- بطاقة دخول الامتحان: الشعار أعلى اليسار، اسم المدرسة أعلى الوسط، صورة الطالب بجانب اسمه،
   // توقيع المدير أسفل اليسار، وختم المدرسة أسفل اليمين ----------
   function printExamCard(studentId) {
+    if (blockIfViewer()) return;
     const s = AccStore.getStudent(studentId);
     if (!s) return;
     const g = AccStore.gradeById(s.class_id);
@@ -1600,6 +1661,7 @@
 
   // ---------- كشف كامل بجميع سندات القبض الخاصة بطالب (مستند واحد منفصل، بخلاف إيصال كل سند الذي يُطبع وحده الآن) ----------
   function printStudentStatement(studentId) {
+    if (blockIfViewer()) return;
     const s = AccStore.getStudent(studentId);
     if (!s) return;
     const qrText = `${AccStore.SCHOOL_CODE}|${s.reg_no}`;

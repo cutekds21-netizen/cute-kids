@@ -658,7 +658,7 @@ import {
       if (!password || password.length < 8) return { ok: false, error: 'كلمة المرور يجب ألا تقل عن 8 أحرف' };
       const existingMap = await getDoc(doc(db, 'usernames', uname));
       if (existingMap.exists()) return { ok: false, error: 'اسم المستخدم موجود مسبقًا' };
-      const roleVal = role === 'admin' ? 'admin' : 'staff';
+      const roleVal = role === 'admin' ? 'admin' : (role === 'viewer' ? 'viewer' : 'staff');
 
       const secondaryApp = initializeApp(global.FIREBASE_CONFIG, 'SecondaryUserCreation-' + Date.now());
       const secondaryAuth = getAuth(secondaryApp);
@@ -686,7 +686,7 @@ import {
       const user = cache.users.find((u) => u.uid === id);
       if (!user) return { ok: false, error: 'المستخدم غير موجود' };
       const session = this.getSession();
-      const roleVal = role === 'admin' ? 'admin' : 'staff';
+      const roleVal = role === 'admin' ? 'admin' : (role === 'viewer' ? 'viewer' : 'staff');
       const activeVal = active !== false;
       if (session && session.userId === id && activeVal === false) {
         return { ok: false, error: 'لا يمكنك تعطيل حسابك الحالي أثناء تسجيل الدخول به' };
