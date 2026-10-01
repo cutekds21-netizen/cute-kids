@@ -572,13 +572,13 @@
             <div class="field full aform-first-payment" id="firstPaymentSection">
               <div class="afp-head">
                 <span class="aform-badge">$</span>
-                <div><b>الدفعة الأولى عند القبول *</b><span>إجبارية لأي نوع رسوم — يُصدر سند قبض تلقائيًا بهذا المبلغ فور حفظ الطالب</span></div>
+                <div><b>الدفعة الأولى عند القبول (اختياري)</b><span>إن أدخلت مبلغًا سيُصدر سند قبض تلقائيًا به فور حفظ الطالب — يمكن تخطي هذا القسم وتسجيل الدفعة لاحقًا</span></div>
               </div>
               <div class="afp-grid">
-                <div class="field"><label>نوع الرسوم (حساب الإيراد) *</label><select name="first_payment_account_id" id="studentFirstPaymentAccountSelect" required></select></div>
-                <div class="field"><label>مبلغ الدفعة الأولى (ر.س) *</label><input type="number" name="first_payment_amount" id="firstPaymentAmount" min="0.01" step="0.01" required /></div>
-                <div class="field"><label>طريقة الدفع *</label>
-                  <select name="first_payment_method" required>
+                <div class="field"><label>نوع الرسوم (حساب الإيراد)</label><select name="first_payment_account_id" id="studentFirstPaymentAccountSelect"></select></div>
+                <div class="field"><label>مبلغ الدفعة الأولى (ر.س)</label><input type="number" name="first_payment_amount" id="firstPaymentAmount" min="0" step="0.01" /></div>
+                <div class="field"><label>طريقة الدفع</label>
+                  <select name="first_payment_method">
                     <option value="cash">نقدًا (الصندوق)</option>
                     <option value="bank">تحويل بنكي (البنك)</option>
                   </select>
@@ -732,6 +732,7 @@
           <select name="role" required>
             <option value="staff">محاسب — بدون صلاحية إدارة المستخدمين</option>
             <option value="admin">مسؤول — صلاحية كاملة + إدارة المستخدمين</option>
+            <option value="viewer">مُشاهد — عرض فقط بدون أي صلاحية تعديل أو إضافة أو حذف أو طباعة</option>
           </select>
         </div>
         <div class="field"><label>كلمة المرور (8 أحرف على الأقل) *</label><input type="password" name="password" required minlength="8" autocomplete="new-password" /></div>
@@ -762,6 +763,7 @@
           <select name="role" required>
             <option value="staff">محاسب — بدون صلاحية إدارة المستخدمين</option>
             <option value="admin">مسؤول — صلاحية كاملة + إدارة المستخدمين</option>
+            <option value="viewer">مُشاهد — عرض فقط بدون أي صلاحية تعديل أو إضافة أو حذف أو طباعة</option>
           </select>
         </div>
       </form>
