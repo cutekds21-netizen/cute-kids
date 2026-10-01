@@ -1409,21 +1409,26 @@
       const qrId = 'waReceiptQr' + Date.now();
       const qrText = `${AccStore.SCHOOL_CODE}|${v.serial}`;
 
-      // نبني نفس عنصر الإيصال المستخدم في الطباعة، لكن خارج الشاشة، كي يلتقطه html2pdf
-      // بنفس تنسيق الموقع (خطوط، ألوان، QR) دون التأثير على واجهة المستخدم الحالية.
-      // ملاحظة مهمّة: نستخدم position: absolute وليس fixed — html2canvas (المكتبة التي
-      // يعتمد عليها html2pdf.js) قد يلتقط العناصر ذات position: fixed كصفحة فارغة تمامًا،
-      // لأن حساب "الالتقاط" يتم عبر استنساخ الصفحة وإعادة رسمها، وموضع fixed لا يُترجم
-      // بشكل موثوق خلال هذه العملية. absolute مع إزاحة كبيرة يحقق نفس هدف "خارج الشاشة"
-      // بأمان تام مع html2canvas.
+      // نبني نفس عنصر الإيصال المستخدم في الطباعة، كي يلتقطه html2pdf بنفس تنسيق الموقع
+      // (خطوط، ألوان، QR) دون التأثير على واجهة المستخدم الحالية.
+      // ملاحظة مهمّة (تم التحقق منها تجريبيًا على الموقع الفعلي): html2canvas يلتقط هذا
+      // العنصر كصفحة فارغة تمامًا إذا كان بوضع position: fixed أو position: absolute
+      // خارج الشاشة — في كلتا الحالتين، بغض النظر عن إعدادات scrollX/scrollY أو
+      // foreignObjectRendering. الحل الموثوق: إبقاء العنصر بوضعه الطبيعي (static) داخل
+      // تدفق المستند (هكذا يلتقطه html2canvas بمحتواه كاملاً)، وإخفاؤه عن المستخدم عبر
+      // وضعه داخل "غلاف" مثبّت بحجم صفر مع overflow: hidden بدلاً من تحريك العنصر نفسه.
       container = document.createElement('div');
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
-      container.style.top = '0';
       container.style.width = '760px';
       container.style.background = '#fff';
       container.innerHTML = buildFeeReceiptHTML(v, student, account, qrId, qrText);
-      document.body.appendChild(container);
+
+      const containerWrapper = document.createElement('div');
+      Object.assign(containerWrapper.style, {
+        position: 'fixed', top: '0', left: '0', width: '0', height: '0',
+        overflow: 'hidden', pointerEvents: 'none',
+      });
+      containerWrapper.appendChild(container);
+      document.body.appendChild(containerWrapper);
 
       try { EduQR.renderToCanvas(container.querySelector('#' + qrId), qrText, { size: 130, margin: 2 }); } catch (e) { /* تجاهل */ }
       await new Promise((resolve) => setTimeout(resolve, 80)); // إتاحة وقت لرسم رمز QR قبل الالتقاط
@@ -1431,9 +1436,7 @@
       const pdfBlob = await window.html2pdf().from(container).set({
         margin: 10,
         image: { type: 'jpeg', quality: 0.95 },
-        // scrollX/scrollY: 0 يمنع أي إزاحة ناتجة عن تمرير الصفحة الفعلية من "تسريب" نفسها
-        // إلى إحداثيات الالتقاط — حماية إضافية ضد نفس عائلة مشاكل "PDF فارغ".
-        html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
+        html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       }).outputPdf('blob');
 
@@ -1455,7 +1458,13 @@
       console.warn('WHATSAPP_RECEIPT_ERROR', e && e.message);
       toast('تعذّر إرسال الإيصال عبر واتساب', 'error');
     } finally {
-      if (container && container.parentNode) container.parentNode.removeChild(container);
+      // نزيل الغلاف الخارجي (containerWrapper) وليس container فقط، لأن container أصبح
+      // الآن بداخل غلاف مثبّت بحجم صفر تم إنشاؤه أعلاه لإخفائه دون إخراجه من تدفق المستند.
+      if (container && container.parentNode) {
+        const wrapper = container.parentNode;
+        if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+        else wrapper.removeChild(container);
+      }
       if (btn) btn.disabled = false;
     }
   }
