@@ -1344,12 +1344,16 @@
 
   // ---------- الطباعة (إيصال سند / بطاقة طالب) — عبر نافذة طباعة المتصفح، يمكن حفظها كـ PDF ----------
   const SCHOOL_PRINT_NAME = 'إيديوبلس - جدة';
+  const SCHOOL_PRINT_NAME_EN = 'EduPlus Jeddah';
 
   // ---------- رسالة ترحيب واتساب تلقائية لولي الأمر عند تسجيل طالب جديد ----------
   // يُرسَل الطلب إلى دالة خادم (Netlify Function) وليس مباشرة إلى واجهة WhatsApp من المتصفح،
   // حتى لا يظهر توكن الوصول السري في كود الموقع. الدالة نفسها تتجاهل الأخطاء بصمت (fire-and-forget)
   // كي لا يتعطّل حفظ الطالب أبدًا بسبب مشكلة في واتساب.
-  const WHATSAPP_WELCOME_API_URL = 'https://hilarious-meerkat-4dcccc.netlify.app/api/whatsapp-welcome';
+  // Shared backend: this Netlify site now serves WhatsApp messages for all
+  // EduPlus schools (Khamis, Abha, Jeddah) from one place, using one phone
+  // number, so each school passes its own name in the request body.
+  const WHATSAPP_WELCOME_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-welcome';
 
   function normalizePhoneForWhatsApp(raw) {
     let digits = String(raw || '').replace(/[^\d]/g, ''); // يزيل + والمسافات والشرطات، يُبقي الأرقام فقط
@@ -1373,7 +1377,7 @@
       fetch(WHATSAPP_WELCOME_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentName, phone }),
+        body: JSON.stringify({ studentName, phone, schoolNameAr: SCHOOL_PRINT_NAME, schoolNameEn: SCHOOL_PRINT_NAME_EN }),
       })
         .then((res) => res.json().catch(() => ({})).then((data) => {
           // لا نزعج المستخدم بأي رسالة — فقط نسجّل النتيجة في console المتصفح لتسهيل تشخيص أي عطل لاحقًا
@@ -1433,7 +1437,7 @@
   // يُبنى نفس الإيصال المستخدم في الطباعة، ثم يُحوَّل إلى PDF داخل المتصفح عبر html2pdf.js
   // (محمَّلة من CDN في index.html)، ويُرسَل إلى دالة خادم (Netlify Function) ترفعه إلى واتساب
   // وترسله ضمن قالب رسالة (payment_receipt) معتمد من ميتا يحتوي على مرفق مستند.
-  const WHATSAPP_RECEIPT_API_URL = 'https://hilarious-meerkat-4dcccc.netlify.app/api/whatsapp-receipt';
+  const WHATSAPP_RECEIPT_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-receipt';
 
   function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
