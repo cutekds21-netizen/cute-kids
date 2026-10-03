@@ -335,6 +335,8 @@
               <button class="icon-btn view" data-view="${s.id}" title="عرض"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
               <button class="icon-btn edit" data-edit="${s.id}" title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
               <button class="icon-btn pay" data-pay="${s.id}" title="إضافة دفعة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></button>
+              <button class="icon-btn" data-wa-start="${s.id}" title="بدء محادثة واتساب (إرسال رسالة تدعو ولي الأمر للرد)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></button>
+              <button class="icon-btn" data-wa-chat="${s.id}" title="إرسال رسالة واتساب حرة (بعد ردّ ولي الأمر خلال 24 ساعة)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
               ${currentRole === 'admin' ? `<button class="icon-btn danger" data-delete="${s.id}" title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
             </div>
           </td>
@@ -348,6 +350,8 @@
       tbody.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => openViewStudent(b.dataset.view)));
       tbody.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openStudentForm(b.dataset.edit); }));
       tbody.querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openPaymentModal(b.dataset.pay); }));
+      tbody.querySelectorAll('[data-wa-start]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; sendWhatsAppStartConversation(b.dataset.waStart, b); }));
+      tbody.querySelectorAll('[data-wa-chat]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openWaChatModal(b.dataset.waChat); }));
       tbody.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', async () => {
         const st = AccStore.getStudent(b.dataset.delete);
         if (!confirm(`حذف الطالب «${st ? st.name : ''}»؟ لن يتم حذف السندات المالية المرتبطة به.`)) return;
@@ -757,6 +761,9 @@
 
   // ---------- إضافة دفعة لطالب ----------
   const studentPaymentForm = $('#studentPaymentForm');
+
+  // ---------- رسالة واتساب حرة لولي الأمر ----------
+  const waChatForm = $('#waChatForm');
   fillFeeTypeSelect($('#studentPaymentFeeTypeSelect'), AccStore.FEE_TYPES);
 
   function openPaymentModal(studentId) {
@@ -1531,6 +1538,109 @@
       if (btn) btn.disabled = false;
     }
   }
+
+  // ---------- محادثة واتساب حرة مع ولي الأمر ----------
+  // WhatsApp's Cloud API only allows free-form (non-template) messages during
+  // the 24 hours after the PARENT has sent the school a message. These two
+  // pieces cover that flow:
+  //   1) sendWhatsAppStartConversation — sends an approved template (with a
+  //      Quick Reply button) inviting the parent to reply. Staff trigger
+  //      this manually per parent, whenever they want to open a chat.
+  //   2) openWaChatModal / the waChatForm submit handler below — lets staff
+  //      type and send a free message. This only succeeds if the parent
+  //      actually replied in the last 24h; staff currently confirm that by
+  //      checking the WhatsApp Business inbox in Meta Business Suite
+  //      themselves before sending (there's no in-app reply tracker yet).
+  const WHATSAPP_START_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-start-conversation';
+  const WHATSAPP_SEND_TEXT_API_URL = 'https://gilded-begonia-2ea387.netlify.app/api/whatsapp-send-text';
+
+  async function sendWhatsAppStartConversation(studentId, btn) {
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    const phone = normalizePhoneForWhatsApp(s.guardian_phone || s.father_phone);
+    if (!phone) { toast('لا يوجد رقم جوال لولي الأمر', 'error'); return; }
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(WHATSAPP_START_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, studentName: s.name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && data.success) {
+        toast('تم إرسال رسالة بدء المحادثة — بانتظار ردّ ولي الأمر', 'success');
+      } else {
+        console.warn('WHATSAPP_START_FAILED', res.status, data);
+        toast('تعذّر إرسال رسالة بدء المحادثة', 'error');
+      }
+    } catch (e) {
+      console.warn('WHATSAPP_START_ERROR', e && e.message);
+      toast('تعذّر إرسال رسالة بدء المحادثة', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function openWaChatModal(studentId) {
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    waChatForm.reset();
+    waChatForm.student_id.value = s.id;
+    $('#waChatModalSub').textContent = `إرسال رسالة لولي أمر: ${s.name} (${s.reg_no})`;
+    $('#waChatAlert').className = 'form-alert';
+    openModal('waChatModal');
+  }
+  $('#waChatModalClose').addEventListener('click', () => closeModal('waChatModal'));
+  $('#waChatCancelBtn').addEventListener('click', () => closeModal('waChatModal'));
+
+  waChatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (blockIfViewer()) return;
+    const alertBox = $('#waChatAlert');
+    alertBox.className = 'form-alert';
+    const fd = new FormData(waChatForm);
+    const studentId = fd.get('student_id');
+    const message = String(fd.get('message') || '').trim();
+    const s = AccStore.getStudent(studentId);
+    const phone = s ? normalizePhoneForWhatsApp(s.guardian_phone || s.father_phone) : '';
+    if (!s || !message) {
+      alertBox.className = 'form-alert show error';
+      alertBox.textContent = 'يرجى كتابة نص الرسالة';
+      return;
+    }
+    if (!phone) {
+      alertBox.className = 'form-alert show error';
+      alertBox.textContent = 'لا يوجد رقم جوال لولي الأمر';
+      return;
+    }
+    const submitBtn = document.querySelector('button[form="waChatForm"]');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const res = await fetch(WHATSAPP_SEND_TEXT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && data.success) {
+        closeModal('waChatModal');
+        toast('تم إرسال الرسالة', 'success');
+      } else if (data && data.outsideWindow) {
+        alertBox.className = 'form-alert show error';
+        alertBox.textContent = 'لم يردّ ولي الأمر خلال آخر 24 ساعة — أرسلوا رسالة "بدء محادثة" أولًا وتأكّدوا من رده قبل إعادة المحاولة';
+      } else {
+        console.warn('WHATSAPP_SEND_TEXT_FAILED', res.status, data);
+        alertBox.className = 'form-alert show error';
+        alertBox.textContent = 'تعذّر إرسال الرسالة — تحقّقوا من الاتصال بالإنترنت وحاولوا مجددًا';
+      }
+    } catch (err) {
+      console.warn('WHATSAPP_SEND_TEXT_ERROR', err && err.message);
+      alertBox.className = 'form-alert show error';
+      alertBox.textContent = 'تعذّر إرسال الرسالة — تحقّقوا من الاتصال بالإنترنت وحاولوا مجددًا';
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
 
   // ---------- إيصال دفع الرسوم التفصيلي (لسندات القبض المرتبطة بطالب) ----------
   function buildFeeReceiptHTML(v, s, account, qrId, qrText) {
