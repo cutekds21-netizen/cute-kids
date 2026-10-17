@@ -30,6 +30,8 @@
     studentsPage: 1,
     studentsSearch: '',
     studentsClassId: '',
+    teachersPage: 1,
+    teachersSearch: '',
   };
 
   function toast(message, type) {
@@ -60,10 +62,10 @@
   }
   // كل عناصر الإضافة/التعديل/الحذف/الطباعة/واتساب التي تُخفى تلقائيًا عن حساب "مُشاهد"
   const VIEWER_HIDE_SELECTORS = [
-    '#addStudentBtn', '#addUserBtn', '#viewAddPaymentBtn',
+    '#addStudentBtn', '#addUserBtn', '#viewAddPaymentBtn', '#addTeacherBtn',
     '#printStudentCardBtn', '#printExamCardBtn', '#printFullStatementBtn',
-    '[data-edit]', '[data-edit-user]', '[data-print]', '[data-whatsapp]',
-    '[data-reset-pwd]', '[data-toggle-active]', '[data-delete]', '[data-delete-user]', '[data-pay]',
+    '[data-edit]', '[data-edit-user]', '[data-edit-teacher]', '[data-print]', '[data-whatsapp]',
+    '[data-reset-pwd]', '[data-toggle-active]', '[data-delete]', '[data-delete-user]', '[data-delete-teacher]', '[data-pay]',
   ];
   function applyViewerLock() {
     if (currentRole !== 'viewer') return;
@@ -154,6 +156,7 @@
   const TITLES = {
     overview: ['نظرة عامة', 'ملخص الوضع المالي للمدرسة'],
     students: ['الطلاب', 'سجل الطلاب الكامل مصنّفًا حسب الصفوف والمراحل'],
+    teachers: ['المعلمون', 'سجل المعلمين والموظفين وبياناتهم'],
     receipts: ['سندات القبض', 'تسجيل ومتابعة رسوم الطلاب والإيرادات'],
     payments: ['سندات الصرف', 'تسجيل ومتابعة مصروفات المدرسة'],
     journal: ['القيود اليومية', 'سجل كل حركة مالية بطرفيها المدين والدائن'],
@@ -462,122 +465,7 @@
     const netFee = tuitionFee * (1 - discount / 100);
     const remaining = netFee - firstPayment;
     if (firstPayment > netFee) {
-      hint.className = 'afp-hint warn';
-      hint.textContent = `الدفعة الأولى (${fmtMoney(firstPayment)}) أكبر من صافي الرسوم المستحقة (${fmtMoney(netFee)})`;
-    } else {
-      hint.className = 'afp-hint';
-      hint.textContent = `صافي الرسوم بعد الخصم: ${fmtMoney(netFee)} — المتبقي بعد الدفعة الأولى: ${fmtMoney(Math.max(0, remaining))}`;
-    }
-  }
-  AccStore.FEE_TYPES.forEach((f) => {
-    studentForm.elements[`fee_${f.id}`].addEventListener('input', () => { updateFeeBreakdownHint(); updateFirstPaymentHint(); });
-  });
-  ['discount_percent', 'first_payment_amount'].forEach((n) => {
-    studentForm.elements[n].addEventListener('input', updateFirstPaymentHint);
-  });
-
-  $('#studentClassSelect').addEventListener('change', () => {
-    const g = AccStore.gradeById($('#studentClassSelect').value);
-    const el = $('#regNoPreview');
-    const isEdit = !!studentForm.student_id.value;
-    if (isEdit) return; // رقم القيد لا يتغيّر عند التعديل
-    if (!g) { el.className = 'reg-preview empty'; el.textContent = 'سيُحدَّد تلقائيًا عند الحفظ'; return; }
-    el.className = 'reg-preview';
-    el.textContent = AccStore.peekNextRegNo(g.id) + ' (تقديري — يُؤكَّد عند الحفظ)';
-  });
-
-  $('#studentPhotoInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const raw = await readFileAsDataURL(file);
-    currentPhotoDataURL = await resizeImageDataURL(raw, 260);
-    $('#studentPhotoPreview').innerHTML = `<img src="${currentPhotoDataURL}" alt="" />`;
-  });
-
-  function wireDocInput(inputEl, labelEl, slot) {
-    inputEl.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (file.size > MAX_DOC_BYTES) {
-        labelEl.textContent = `الملف كبير جدًا (${Math.round(file.size / 1024)}KB) — الحد الأقصى 300KB`;
-        labelEl.style.color = 'var(--status-critical)';
-        e.target.value = '';
-        return;
-      }
-      const dataUrl = await readFileAsDataURL(file);
-      currentDocs[slot] = { name: file.name, dataUrl };
-      labelEl.textContent = `✓ ${file.name} (${Math.round(file.size / 1024)}KB)`;
-      labelEl.style.color = 'var(--status-good-text)';
-    });
-  }
-  wireDocInput($('#studentDoc1Input'), $('#studentDoc1Name'), 0);
-  wireDocInput($('#studentDoc2Input'), $('#studentDoc2Name'), 1);
-
-  function resetStudentForm() {
-    studentForm.reset();
-    studentForm.student_id.value = '';
-    currentPhotoDataURL = '';
-    currentDocs = [null, null];
-    $('#studentPhotoPreview').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>';
-    $('#studentDoc1Name').textContent = 'لم يتم اختيار ملف — الحد الأقصى 300KB (صورة أو PDF)';
-    $('#studentDoc2Name').textContent = 'لم يتم اختيار ملف — الحد الأقصى 300KB (صورة أو PDF)';
-    $('#studentDoc1Name').style.color = '';
-    $('#studentDoc2Name').style.color = '';
-    $('#regNoPreview').className = 'reg-preview empty';
-    $('#regNoPreview').textContent = 'سيُحدَّد تلقائيًا عند الحفظ';
-    $('#studentFormAlert').className = 'form-alert';
-    studentForm.admission_date.value = todayISO();
-    studentForm.first_payment_method.value = 'cash';
-    AccStore.FEE_TYPES.forEach((f) => { studentForm.elements[`fee_${f.id}`].value = 0; });
-    $('#firstPaymentHint').className = 'afp-hint';
-    $('#firstPaymentHint').textContent = 'أدخل تفصيل الرسوم أولًا لحساب صافي المبلغ المستحق';
-    updateFeeBreakdownHint();
-  }
-
-  // ---------- إظهار/إخفاء قسم الدفعة الأولى: يظهر عند إضافة طالب جديد فقط (اختياري)، لا يظهر عند التعديل ----------
-  function setFirstPaymentRequired(show) {
-    $('#firstPaymentSection').classList.toggle('hidden', !show);
-    // الدفعة الأولى أصبحت اختيارية: لا تُفرض خاصية required على حقولها حتى عند إضافة طالب جديد
-    ['first_payment_account_id', 'first_payment_amount', 'first_payment_method'].forEach((n) => {
-      studentForm.elements[n].required = false;
-    });
-  }
-
-  function openStudentForm(studentId) {
-    resetStudentForm();
-    setFirstPaymentRequired(!studentId);
-    if (studentId) {
-      const s = AccStore.getStudent(studentId);
-      if (!s) return;
-      $('#studentModalTitle').textContent = 'تعديل بيانات الطالب';
-      studentForm.student_id.value = s.id;
-      studentForm.class_id.value = s.class_id;
-      studentForm.name.value = s.name || '';
-      studentForm.dob.value = s.dob || '';
-      studentForm.gender.value = s.gender || '';
-      studentForm.admission_date.value = s.admission_date || todayISO();
-      // تفصيل الرسوم: يُعبَّأ من s.fees إن وُجد، أو تُوضع الرسوم القديمة (قبل هذه الميزة) كاملة في «رسوم فصلية»
-      const savedFees = s.fees || { termly: s.tuition_fee || 0 };
-      AccStore.FEE_TYPES.forEach((f) => { studentForm.elements[`fee_${f.id}`].value = savedFees[f.id] || 0; });
-      updateFeeBreakdownHint();
-      studentForm.discount_percent.value = s.discount_percent || 0;
-      studentForm.guardian_phone.value = s.guardian_phone || '';
-      studentForm.blood_group.value = s.blood_group || '';
-      studentForm.previous_school.value = s.previous_school || '';
-      studentForm.address.value = s.address || '';
-      studentForm.notes.value = s.notes || '';
-      studentForm.father_name.value = s.father_name || '';
-      studentForm.father_id.value = s.father_id || '';
-      studentForm.father_job.value = s.father_job || '';
-      studentForm.father_phone.value = s.father_phone || '';
-      studentForm.mother_name.value = s.mother_name || '';
-      studentForm.mother_id.value = s.mother_id || '';
-      studentForm.mother_job.value = s.mother_job || '';
-      studentForm.mother_phone.value = s.mother_phone || '';
-      currentPhotoDataURL = s.photo || '';
-      currentDocs = [s.documents && s.documents[0] ? s.documents[0] : null, s.documents && s.documents[1] ? s.documents[1] : null];
-      if (currentPhotoDataURL) $('#studentPhotoPreview').innerHTML = `<img src="${currentPhotoDataURL}" alt="" />`;
-      if (currentDocs[0]) { $('#studentDoc1Name').textContent = `✓ ${currentDocs[0].name}`; $('#studentDoc1Name').style.color = 'var(--status-good-text)'; }
+      hint.className = 'afp-hint      if (currentDocs[0]) { $('#studentDoc1Name').textContent = `✓ ${currentDocs[0].name}`; $('#studentDoc1Name').style.color = 'var(--status-good-text)'; }
       if (currentDocs[1]) { $('#studentDoc2Name').textContent = `✓ ${currentDocs[1].name}`; $('#studentDoc2Name').style.color = 'var(--status-good-text)'; }
       $('#regNoPreview').className = 'reg-preview';
       $('#regNoPreview').textContent = s.reg_no + ' (ثابت)';
@@ -688,6 +576,174 @@
       alertBox.textContent = 'تعذّر الحفظ — تحقق من الاتصال بالإنترنت وحاول مجددًا';
     } finally {
       if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
+  // ---------- المعلمون والموظفون ----------
+  let teachersDebounce = null;
+  $('#teacherSearch').addEventListener('input', (e) => {
+    clearTimeout(teachersDebounce);
+    teachersDebounce = setTimeout(() => { state.teachersSearch = e.target.value.trim(); state.teachersPage = 1; loadTeachers(); }, 250);
+  });
+  $('#exportTeachersBtn').addEventListener('click', () => AccStore.exportTeachersCSV());
+
+  $('#teacherRoleSelect').innerHTML = AccStore.TEACHER_ROLES.map((r) => `<option value="${r.id}">${escapeHtml(r.label)}</option>`).join('');
+
+  function loadTeachers() {
+    const { rows, total } = AccStore.listTeachers({ search: state.teachersSearch, page: state.teachersPage, pageSize: 8 });
+    const totals = AccStore.getTeachersTotals();
+    $('#teachersCount').textContent = totals.totalTeachers;
+    $('#teachersTotalSalaries').textContent = fmtMoney(totals.totalSalaries);
+
+    const tbody = $('#teachersTableBody');
+    const empty = $('#teachersEmpty');
+    if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); }
+    else {
+      empty.classList.add('hidden');
+      tbody.innerHTML = rows.map((t) => `
+        <tr>
+          <td><div class="student-avatar">${t.photo ? `<img src="${t.photo}" alt="" />` : escapeHtml((t.name || '?').slice(0, 1))}</div></td>
+          <td>
+            <div class="student-name-cell">
+              <div><div class="sn-name">${escapeHtml(t.name)}</div><div class="sn-reg">${escapeHtml(t.emp_no || '')}</div></div>
+            </div>
+          </td>
+          <td>${escapeHtml(AccStore.teacherRoleLabel(t.role))}</td>
+          <td class="mono">${escapeHtml(t.phone || '—')}</td>
+          <td>${fmtMoney(t.salary)}</td>
+          <td>${t.join_date ? fmtDate(t.join_date) : '—'}</td>
+          <td>
+            <div class="row-actions">
+              <button class="icon-btn edit" data-edit-teacher="${t.id}" title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
+              ${currentRole === 'admin' ? `<button class="icon-btn danger" data-delete-teacher="${t.id}" title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>` : ''}
+            </div>
+          </td>
+        </tr>`).join('');
+
+      tbody.querySelectorAll('[data-edit-teacher]').forEach((b) => b.addEventListener('click', () => { if (blockIfViewer()) return; openTeacherForm(b.dataset.editTeacher); }));
+      tbody.querySelectorAll('[data-delete-teacher]').forEach((b) => b.addEventListener('click', async () => {
+        const t = AccStore.getTeacher(b.dataset.deleteTeacher);
+        if (!confirm(`حذف «${t ? t.name : ''}» من سجل المعلمين والموظفين؟`)) return;
+        b.disabled = true;
+        const result = await AccStore.deleteTeacher(b.dataset.deleteTeacher);
+        b.disabled = false;
+        if (!result.ok) { toast(result.error || 'ليست لديك صلاحية لحذف المعلمين', 'error'); return; }
+        toast('تم حذف السجل', 'success');
+        loadTeachers();
+      }));
+    }
+    renderPagination('teachersPagInfo', 'teachersPagPages', total, 8, state.teachersPage, (p) => { state.teachersPage = p; loadTeachers(); });
+  }
+
+  // ---------- نموذج إضافة / تعديل معلم أو موظف ----------
+  const teacherForm = $('#teacherForm');
+  let currentTeacherPhotoDataURL = '';
+  const MAX_TEACHER_PHOTO_BYTES = 100 * 1024;
+
+  $('#teacherPhotoInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > MAX_TEACHER_PHOTO_BYTES) {
+      toast(`الصورة كبيرة جدًا (${Math.round(file.size / 1024)}KB) — الحد الأقصى 100KB`, 'error');
+      e.target.value = '';
+      return;
+    }
+    const raw = await readFileAsDataURL(file);
+    currentTeacherPhotoDataURL = await resizeImageDataURL(raw, 260);
+    $('#teacherPhotoPreview').innerHTML = `<img src="${currentTeacherPhotoDataURL}" alt="" />`;
+  });
+
+  function resetTeacherForm() {
+    teacherForm.reset();
+    teacherForm.teacher_id.value = '';
+    currentTeacherPhotoDataURL = '';
+    $('#teacherPhotoPreview').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>';
+    $('#teacherFormAlert').className = 'form-alert';
+    teacherForm.join_date.value = todayISO();
+  }
+
+  function openTeacherForm(teacherId) {
+    resetTeacherForm();
+    if (teacherId) {
+      const t = AccStore.getTeacher(teacherId);
+      if (!t) return;
+      $('#teacherModalTitle').textContent = 'تعديل بيانات المعلم / الموظف';
+      teacherForm.teacher_id.value = t.id;
+      teacherForm.role.value = t.role || '';
+      teacherForm.phone.value = t.phone || '';
+      teacherForm.name.value = t.name || '';
+      teacherForm.salary.value = t.salary || 0;
+      teacherForm.join_date.value = t.join_date || todayISO();
+      teacherForm.experience.value = t.experience || '';
+      teacherForm.gender.value = t.gender || '';
+      teacherForm.guardian_name.value = t.guardian_name || '';
+      teacherForm.email.value = t.email || '';
+      teacherForm.religion.value = t.religion || '';
+      teacherForm.national_id.value = t.national_id || '';
+      teacherForm.dob.value = t.dob || '';
+      teacherForm.blood_group.value = t.blood_group || '';
+      teacherForm.education.value = t.education || '';
+      teacherForm.address.value = t.address || '';
+      currentTeacherPhotoDataURL = t.photo || '';
+      if (currentTeacherPhotoDataURL) $('#teacherPhotoPreview').innerHTML = `<img src="${currentTeacherPhotoDataURL}" alt="" />`;
+    } else {
+      $('#teacherModalTitle').textContent = 'إضافة معلم / موظف جديد';
+    }
+    openModal('teacherModal');
+  }
+
+  $('#addTeacherBtn').addEventListener('click', () => { if (blockIfViewer()) return; openTeacherForm(null); });
+  $('#teacherModalClose').addEventListener('click', () => closeModal('teacherModal'));
+  $('#teacherCancelBtn').addEventListener('click', () => closeModal('teacherModal'));
+
+  teacherForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (blockIfViewer()) return;
+    const alertBox = $('#teacherFormAlert');
+    alertBox.className = 'form-alert';
+    const fd = new FormData(teacherForm);
+    const teacherId = fd.get('teacher_id');
+    if (!fd.get('role') || !fd.get('name') || !fd.get('salary') || !fd.get('join_date')) {
+      alertBox.className = 'form-alert show error';
+      alertBox.textContent = 'يرجى تعبئة الوظيفة والاسم والراتب الشهري وتاريخ الالتحاق — هذه الحقول إجبارية';
+      return;
+    }
+    const payload = {
+      role: fd.get('role'),
+      phone: fd.get('phone'),
+      name: fd.get('name'),
+      salary: fd.get('salary'),
+      join_date: fd.get('join_date'),
+      photo: currentTeacherPhotoDataURL,
+      experience: fd.get('experience'),
+      gender: fd.get('gender'),
+      guardian_name: fd.get('guardian_name'),
+      email: fd.get('email'),
+      religion: fd.get('religion'),
+      national_id: fd.get('national_id'),
+      dob: fd.get('dob'),
+      blood_group: fd.get('blood_group'),
+      education: fd.get('education'),
+      address: fd.get('address'),
+    };
+    const saveBtn2 = $('#teacherSaveBtn');
+    if (saveBtn2) saveBtn2.disabled = true;
+    try {
+      if (teacherId) {
+        await AccStore.updateTeacher(teacherId, payload);
+        toast('تم تحديث بيانات المعلم / الموظف', 'success');
+      } else {
+        const created = await AccStore.createTeacher(payload);
+        toast(`تمت إضافة السجل (الرقم الوظيفي: ${created.emp_no})`, 'success');
+      }
+      closeModal('teacherModal');
+      state.teachersPage = 1;
+      loadTeachers();
+    } catch (err) {
+      alertBox.className = 'form-alert show error';
+      alertBox.textContent = 'تعذّر الحفظ — تحقق من الاتصال بالإنترنت وحاول مجددًا';
+    } finally {
+      if (saveBtn2) saveBtn2.disabled = false;
     }
   });
 
@@ -1833,6 +1889,124 @@
             <div class="pr-info-item"><span>رقم القيد</span><b class="mono">${escapeHtml(s.reg_no)}</b></div>
             <div class="pr-info-item"><span>اسم الطالب</span><b>${escapeHtml(s.name)}</b></div>
             <div class="pr-info-item"><span>ولي الأمر</span><b>${escapeHtml(s.father_name || '—')}</b></div>
+            <div class="pr-info-item"><span>الصف / المرحلة</span><b>${g ? escapeHtml(g السند</span><b class="${remainingAfter > 0 ? 'warn' : 'good'}">${fmtMoney(remainingAfter)}</b></div>
+          </div>
+        </div>
+
+        <table class="pr-table">
+          <thead><tr><th>م</th><th>البيان</th><th>المبلغ</th></tr></thead>
+          <tbody>
+            ${particularsRows.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.label)}</td><td>${fmtMoney(r.amount)}</td></tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr><td colspan="2">الإجمالي المستحق</td><td>${fmtMoney(dueBeforeThis)}</td></tr>
+            <tr><td colspan="2">المدفوع في هذا السند</td><td>${fmtMoney(v.amount)}</td></tr>
+            <tr class="pr-table-due"><td colspan="2">المتبقي</td><td>${fmtMoney(remainingAfter)}</td></tr>
+          </tfoot>
+        </table>
+
+        <div class="pr-qr"><canvas id="${qrId}"></canvas></div>
+
+        <div class="pr-signoff">
+          <div><span>إعداد</span><b>${escapeHtml(SCHOOL_PRINT_NAME)}</b></div>
+          <div><span>اعتماد</span><b>ــــــــــــــــــ</b></div>
+        </div>
+        <div class="pr-foot">قسم الحسابات — ${escapeHtml(SCHOOL_PRINT_NAME)}</div>
+      </div>
+    `;
+  }
+
+  function printStudentCard(studentId) {
+    if (blockIfViewer()) return;
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    const g = AccStore.gradeById(s.class_id);
+    const qrText = `${AccStore.SCHOOL_CODE}|${s.reg_no}`;
+    const qrId = 'printQr' + Date.now();
+    printHTML(`
+      <div class="print-receipt">
+        ${printHeaderHTML('بطاقة تعريف الطالب')}
+        <div class="pr-title">${escapeHtml(s.name)}</div>
+        <div class="pr-row"><span>رقم القيد</span><b class="mono">${s.reg_no}</b></div>
+        <div class="pr-row"><span>الصف / المرحلة</span><b>${g ? escapeHtml(g.name) : '—'}</b></div>
+        <div class="pr-row"><span>تاريخ الالتحاق</span><b>${s.admission_date ? fmtDate(s.admission_date) : '—'}</b></div>
+        <div class="pr-row"><span>جوال ولي الأمر</span><b>${escapeHtml(s.guardian_phone || '—')}</b></div>
+        <div class="pr-qr"><canvas id="${qrId}"></canvas></div>
+        <div class="pr-foot">${escapeHtml(SCHOOL_PRINT_NAME)} — تعريف سريع عبر مسح رمز QR</div>
+      </div>
+    `);
+    try { EduQR.renderToCanvas(document.getElementById(qrId), qrText, { size: 130, margin: 2 }); } catch (e) { /* تجاهل */ }
+  }
+
+  // ---------- بطاقة دخول الامتحان: الشعار أعلى اليسار، اسم المدرسة أعلى الوسط، صورة الطالب بجانب اسمه،
+  // توقيع المدير أسفل اليسار، وختم المدرسة أسفل اليمين ----------
+  function printExamCard(studentId) {
+    if (blockIfViewer()) return;
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    const g = AccStore.gradeById(s.class_id);
+    printHTML(`
+      <div class="print-receipt exam-card">
+        <div class="ec-head">
+          <img class="ec-logo" src="../img/logo.png" alt="${escapeHtml(SCHOOL_PRINT_NAME)}" />
+          <div class="ec-schoolname">
+            <b>${escapeHtml(SCHOOL_PRINT_NAME)}</b>
+            <span>بطاقة دخول الامتحان</span>
+          </div>
+        </div>
+        <div class="ec-body">
+          <div class="ec-info">
+            <div class="pr-row"><span>اسم الطالب</span><b>${escapeHtml(s.name)}</b></div>
+            <div class="pr-row"><span>رقم الجلوس</span><b class="mono">${escapeHtml(s.reg_no)}</b></div>
+            <div class="pr-row"><span>الصف / المرحلة</span><b>${g ? escapeHtml(g.name) : '—'}</b></div>
+          </div>
+          <div class="ec-photo">${s.photo ? `<img src="${s.photo}" alt="" />` : 'صورة الطالب'}</div>
+        </div>
+        <div class="ec-footer">
+          <div class="ec-sign"><span>توقيع المدير</span><b>ــــــــــــــــــ</b></div>
+          <div class="ec-sealbox"><span>ختم المدرسة</span><div class="ec-seal">ختم</div></div>
+        </div>
+      </div>
+    `);
+  }
+
+  // ---------- كشف كامل بجميع سندات القبض الخاصة بطالب (مستند واحد منفصل، بخلاف إيصال كل سند الذي يُطبع وحده الآن) ----------
+  function printStudentStatement(studentId) {
+    if (blockIfViewer()) return;
+    const s = AccStore.getStudent(studentId);
+    if (!s) return;
+    const qrText = `${AccStore.SCHOOL_CODE}|${s.reg_no}`;
+    const qrId = 'printQr' + Date.now();
+    printHTML(buildStudentStatementHTML(s, qrId, qrText));
+    try { EduQR.renderToCanvas(document.getElementById(qrId), qrText, { size: 100, margin: 2 }); } catch (e) { /* تجاهل */ }
+  }
+
+  function buildStudentStatementHTML(s, qrId, qrText) {
+    const g = AccStore.gradeById(s.class_id);
+    const pay = AccStore.getStudentPayments(s);
+    const netFee = round2((s.tuition_fee || 0) * (1 - (s.discount_percent || 0) / 100));
+    const discountAmount = round2((s.tuition_fee || 0) * ((s.discount_percent || 0) / 100));
+    const remaining = Math.max(0, round2(netFee - pay.totalPaid));
+
+    // ترتيب السندات تصاعديًا حسب التاريخ لحساب المتبقي التراكمي بعد كل سند
+    const ascending = [...pay.rows].sort((a, b) => new Date(a.date) - new Date(b.date) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const cumulativeAt = (index) => round2(ascending.slice(0, index + 1).reduce((sum, r) => sum + r.amount, 0));
+    const statementRows = ascending.map((r, i) => ({ ...r, dueAfter: Math.max(0, round2(netFee - cumulativeAt(i))) }));
+
+    const feeBreakdownRows = AccStore.FEE_TYPES
+      .filter((f) => (s.fees || {})[f.id] > 0)
+      .map((f) => ({ label: f.label, amount: s.fees[f.id] }));
+
+    return `
+      <div class="print-receipt fee-receipt">
+        ${printHeaderHTML()}
+        <div class="pr-title">كشف كامل بسندات القبض — ${escapeHtml(s.name)}</div>
+
+        <div class="pr-info-grid">
+          <div class="pr-info-col">
+            <div class="pr-info-item"><span>رقم القيد</span><b class="mono">${escapeHtml(s.reg_no)}</b></div>
+            <div class="pr-info-item"><span>اسم الطالب</span><b>${escapeHtml(s.name)}</b></div>
+            <div class="pr-info-item"><span>ولي الأمر</span><b>${escapeHtml(s.father_name || '—')}</b></div>
             <div class="pr-info-item"><span>الصف / المرحلة</span><b>${g ? escapeHtml(g.name) : '—'}</b></div>
           </div>
           <div class="pr-info-col">
@@ -1893,7 +2067,7 @@
 
   // ---------- تحديث حي: يُعاد رسم التبويب الحالي تلقائيًا فور وصول أي تغيير من Firestore (من نفس الجهاز أو من جهاز آخر) ----------
   const TAB_LOADERS = {
-    overview: loadOverview, students: loadStudents, receipts: loadReceipts, payments: loadPayments,
+    overview: loadOverview, students: loadStudents, teachers: loadTeachers, receipts: loadReceipts, payments: loadPayments,
     journal: loadJournal, ledger: loadLedger, 'trial-balance': loadTrialBalance,
     'income-statement': loadIncomeStatement, accounts: loadAccountsTab, users: loadUsersTab,
   };
